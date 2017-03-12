@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html> 
+<head> 
+<meta charset="UTF-8" />
+<title>A Python LitProg Weaver :: RichardTodd.name</title> 
+</head> 
+<body> 
+<div id=header> 
+<h1><a href="http://richardtodd.name">RichardTodd.name</a></h1> 
+</div> 
+
+<div id=content>
+<p><a href="http://blog.richardtodd.name/category/writings"><- Back to the Writings category</a>
+<h1>A Python LitProg Weaver</h1>
+<div class=titleinfo>2011-02-22</div>
+<p><strong><a name="sect1">1</a>. Overview.</strong>  I am a fan of Literate Programming, and since I'm writing papers
+about various algorithms, I thought I might as well make the papers into 
+executable code in the process! It seems most litprog enthusiasts roll their
+own system, so I thought I might as well do the same.  
+
+<p>I should note: the purpose of this document isn't to be an ideal
+example of literate programming in action.  The weaving program is a
+well-understood idea, and I'm not doing anything novel here.  
+The goal was to get this tool written as quickly as possible, so that I could get on
+to writing more interesting programs with it. 
+<p><strong><a name="sect2">2</a>. </strong> First thing's first.  Let's define the overview 
+of our program:
+<p> &lang;file:pyweave.py &rang;&equiv;
+<pre class=listing><code>#!/usr/bin/env python
+
+import sys
+import rwt_processor.processor as fp
+
+</code>&lt; Data Structures <a href="#sect9">9</a> &gt;<code>
+</code>&lt; Functions <a href="#sect6">6</a> &gt;<code>
+</code>&lt; Weave Formatters <a href="#sect28">28</a> &gt;<code>
+</code>&lt; Greet the user <a href="#sect3">3</a> &gt;<code>
+</code>&lt; Process the input file <a href="#sect4">4</a> &gt;<code>
+</code></pre>
+<p><strong><a name="sect3">3</a>. </strong> Greeting the user should be easy enough.  Just give a version
+number to make it look professional.
+<p> &lang;Greet the user &rang;&equiv;
+<pre class=listing><code>print('pyweave v0.2 '
+      '(c) 2011 Richard Todd '
+      '&lt;richard@richardtodd.name&gt;')
+print()
+</code></pre>
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect4">4</a>. </strong> The biggest challenge for the weaver is 
+getting all of the cross-references correct.  We'll have to process the 
+entire input before writing out any output.    
+<p> &lang;Process the input file &rang;&equiv;
+<pre class=listing><code>filename = sys.argv[1]
+
+print('Reading',filename)
+
+with fp.FileProcessor(open(filename,'r')) as infile:
+    </code>&lt; Register the out-extension command <a href="#sect5">5</a> &gt;<code>
+    </code>&lt; Gather up data about the input file <a href="#sect7">7</a> &gt;<code>
+
+outfilename = filename[:filename.rindex('.')] + '.' + outExtension
+print('Writing',outfilename)
+
+with open(outfilename,'w') as outfile:
+    </code>&lt; Select the correct output style <a href="#sect21">21</a> &gt;<code>
+    </code>&lt; Write the output file <a href="#sect22">22</a> &gt;<code>
+
+print('Done!')
+</code></pre>
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect5">5</a>. </strong> The user should tell us what kind of file we are weaving.  In this version, 
+plain text, LaTeX, and HTML are supported.
+<p> &lang;Register the out-extension command &rang;&equiv;
+<pre class=listing><code>infile.register("out-extension",set_ext,False);
+</code></pre>
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect6">6</a>. </strong> &lang;Functions &rang;&equiv;
+<pre class=listing><code>outExtension = "txt"
+def set_ext(processor,txt):
+  global outExtension
+  outExtension = txt
+</code></pre>
+<br>See also: <a href="#sect8">8</a>, <a href="#sect11">11</a>, <a href="#sect12">12</a>, <a href="#sect13">13</a>, <a href="#sect14">14</a>, <a href="#sect19">19</a>, <a href="#sect24">24</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect7">7</a>. Reading in the Input.</strong>  We'll suck the input file into a data structure
+line-by-line.  The structure of a web file is such that the document is 
+composed of:
+<ul>
+<li> HTML prematter
+<li> Alternating 'text' and 'code' sections
+  <ul>
+     <li> Bare text sections start with <code>@</code>
+     <li> Named text sections start with <code>@*</code>
+     <li> Raw HTML sections start wil <code>@+ </code> 
+     <li> Code sections start with <code>@<name@></code>=
+  </ul>
+</ul>
+<p> We'll grab the prematter by inserting an assumed
+raw HTML section at the top of the file...
+<p> &lang;Gather up data about the input file &rang;&equiv;
+<pre class=listing><code>line = "@+\n" # start with RAW html...
+while True:
+   if len(line) == 0:
+       break
+   elif is_text_head(line):
+      line = process_text(infile,line)
+   elif is_code_head(line):
+      line = process_code(infile,line)
+   else:
+      raise SyntaxError("Unknown input: "+line)
+</code></pre>
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect8">8</a>. </strong> The functions to spot text and code headings are
+pretty straightforward.
+<p> &lang;Functions &rang;+&equiv;
+<pre class=listing><code>def is_text_head(line):
+  return ( line.startswith('@ ') or
+           line.startswith('@* ') or
+           line.startswith('@+') or
+           line.rstrip() == '@'
+         )
+
+def is_code_head(line):
+    tmp = line.strip()
+    return ( tmp.startswith('@&lt;') and
+             tmp.endswith('@&gt;=') )
+</code></pre>
+<br>See also: <a href="#sect6">6</a>, <a href="#sect11">11</a>, <a href="#sect12">12</a>, <a href="#sect13">13</a>, <a href="#sect14">14</a>, <a href="#sect19">19</a>, <a href="#sect24">24</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect9">9</a>. </strong> Now, when we process a text or code section, we'll need to put them
+in a data structure that understands their alternating pattern and
+interrelationships.  For starters, we'll need a name registry to track the
+section numbers where we defined and used a given code section.  
+<p> &lang;Data Structures &rang;&equiv;
+<pre class=listing><code>class name_entry:
+  def __init__(self):
+     self.defined = []
+     self.used_in = []
+
+name_registry = {}  # "name" -&gt; name_entry
+</code></pre>
+<br>See also: <a href="#sect10">10</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect10">10</a>. </strong> We also need to store off the actual words used in the input file, for both
+the text and the code sections.
+<p> &lang;Data Structures &rang;+&equiv;
+<pre class=listing><code>class input_pair:
+  def __init__(self):
+     self.number = None
+     self.text = []
+     self.text_name = None
+     self.code = []
+     self.code_name = None
+
+input_db = []     # list of input_pairs
+</code></pre>
+<br>See also: <a href="#sect9">9</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect11">11</a>. </strong> We'll make a convenience function to grab a new section number.
+<p> &lang;Functions &rang;+&equiv;
+<pre class=listing><code>def gen_new_section():
+  num = 1
+  while True:
+    yield num
+    num = num + 1
+
+section_number = gen_new_section()
+</code></pre>
+<br>See also: <a href="#sect6">6</a>, <a href="#sect8">8</a>, <a href="#sect12">12</a>, <a href="#sect13">13</a>, <a href="#sect14">14</a>, <a href="#sect19">19</a>, <a href="#sect24">24</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect12">12</a>. </strong> The code for text sections is pretty straightforward.  Since text sections always
+precede code sections, this is the place where new <code>input_pair</code>s are added to our
+list.
+<p> &lang;Functions &rang;+&equiv;
+<pre class=listing><code>def process_text(infile,line):
+   new_section = input_pair()
+   if line.startswith('@*'):
+      line = line[3:].lstrip()
+      new_section.text_name = line[:line.index('.')+1]
+      line = line[line.index('.')+1:]
+      new_section.number = next(section_number)
+   elif line.startswith('@+'):
+      line = line[3:].lstrip()
+   else:
+      line = line[1:]
+      new_section.number = next(section_number)
+   if len(line.strip())&gt;0:
+     new_section.text.append(line)
+   num_empty = 0
+   while True:
+        line = infile.readline()
+        if ( len(line) == 0 or
+             is_text_head(line) or
+             is_code_head(line)  ):
+           break
+        elif len(line.strip())&gt;0:
+           if num_empty &gt; 0:
+              if len(new_section.text) &gt; 0:
+                 new_section.text.append('\n'*num_empty)
+           num_empty = 0
+           new_section.text.append(line)
+        else:
+           num_empty = num_empty + 1
+   input_db.append(new_section)
+   return line
+</code></pre>
+<br>See also: <a href="#sect6">6</a>, <a href="#sect8">8</a>, <a href="#sect11">11</a>, <a href="#sect13">13</a>, <a href="#sect14">14</a>, <a href="#sect19">19</a>, <a href="#sect24">24</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect13">13</a>. </strong> When we encounter a named code section, we'll need to be able to
+convert names like "abbrev..." to "abbreviated name" by looking it
+up in the name registry.  This is a strict linear search, so the
+algorithm would need to be improved if we ever want to handle huge
+inputs efficiently.
+<p> &lang;Functions &rang;+&equiv;
+<pre class=listing><code>def normalize_name(name):
+    tmp = name.strip()
+    if tmp.endswith('...'):
+        found = None
+        tmp = tmp[:-3]
+        for k in name_registry:
+            if k.startswith(tmp):
+                if not found:
+                    found = k
+                else:
+                    raise ValueError(name +
+                                     " matches both &lt;" +
+                                     found + "&gt; and &lt;" +
+                                     k + "&gt;")
+        if found:
+            tmp = found
+        else:
+            raise ValueError(name + " does not match any " +
+                             "code sections defined so far!")
+    return tmp
+</code></pre>
+<br>See also: <a href="#sect6">6</a>, <a href="#sect8">8</a>, <a href="#sect11">11</a>, <a href="#sect12">12</a>, <a href="#sect14">14</a>, <a href="#sect19">19</a>, <a href="#sect24">24</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect14">14</a>. </strong> Now, with the ability to look up abbreviations, we can process a code section.  
+We track cross reference information as we go.
+<p> &lang;Functions &rang;+&equiv;
+<pre class=listing><code>def process_code(infile,line):
+    </code>&lt; Create a new <code>input_pair</code> if necessary <a href="#sect15">15</a> &gt;<code>
+    </code>&lt; Add the definition to our registry <a href="#sect16">16</a> &gt;<code>
+    answer = []
+    num_empty = 0
+    while True:
+        rawline = infile.readline()
+        line = rawline.rstrip()
+        if (len(rawline) == 0 or
+            is_text_head(rawline) or
+            is_code_head(rawline) ):
+            break
+        elif  len(line)==0:
+            num_empty = num_empty+1
+        else:
+            if num_empty &gt; 0:
+               answer.append('\n'*num_empty)
+               num_empty = 0
+            answer.append(line+'\n')
+            if is_code_pointer(line):
+                </code>&lt; Remember where this code was used <a href="#sect17">17</a> &gt;<code>
+    </code>&lt; Store the code in the input database <a href="#sect18">18</a> &gt;<code>
+    return rawline
+</code></pre>
+<br>See also: <a href="#sect6">6</a>, <a href="#sect8">8</a>, <a href="#sect11">11</a>, <a href="#sect12">12</a>, <a href="#sect13">13</a>, <a href="#sect19">19</a>, <a href="#sect24">24</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect15">15</a>. </strong> We grab the most recent <code>input_pair</code>, checking to
+make sure that it has a section number <em>and</em> doesn't
+already have code in it.  If it does, we make a new
+<code>input_pair</code> with a section number, but devoid of text.  At
+the end of this code, <code>pair</code> points to the <code>input_pair</code> to which 
+we'll be adding.
+<p> &lang;Create a new <code>input_pair</code> if necessary &rang;&equiv;
+<pre class=listing><code>pair = None
+if len(input_db) &gt; 0:
+  pair = input_db[-1]
+else:
+  pair = input_pair()
+
+if( (pair.number == None) or
+    (pair.code_name != None) ):
+  pair = input_pair()
+  pair.number = next(section_number)
+  input_db.append(pair)
+</code></pre>
+<br>This code used in: <a href="#sect14">14</a>.
+<p><strong><a name="sect16">16</a>. </strong> &lang;Add the definition to our registry &rang;&equiv;
+<pre class=listing><code>code_name = normalize_name(line.strip()[2:-3])
+entry = name_registry.setdefault(code_name,name_entry())
+entry.defined.append(pair.number)
+</code></pre>
+<br>This code used in: <a href="#sect14">14</a>.
+<p><strong><a name="sect17">17</a>. </strong> &lang;Remember where this code was used &rang;&equiv;
+<pre class=listing><code>pointed_name = extract_code_pointer(line)
+pointed = name_registry.setdefault(pointed_name,name_entry())
+pointed.used_in.append(pair.number)
+</code></pre>
+<br>This code used in: <a href="#sect14">14</a>.
+<p><strong><a name="sect18">18</a>. </strong> &lang;Store the code in the input database &rang;&equiv;
+<pre class=listing><code>pair.code = answer
+pair.code_name = code_name
+</code></pre>
+<br>This code used in: <a href="#sect14">14</a>.
+<p><strong><a name="sect19">19</a>. </strong> &lang;Functions &rang;+&equiv;
+<pre class=listing><code>def is_code_pointer(line):
+    tmp = line.strip()
+    return ( tmp.startswith('@&lt;') and
+             tmp.endswith('@&gt;') )
+def extract_code_pointer(line):
+    return normalize_name(line.strip()[2:-2])
+</code></pre>
+<br>See also: <a href="#sect6">6</a>, <a href="#sect8">8</a>, <a href="#sect11">11</a>, <a href="#sect12">12</a>, <a href="#sect13">13</a>, <a href="#sect14">14</a>, <a href="#sect24">24</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect20">20</a>. Output.</strong> Ok, now that we've read in the file and gotten all of the cross references
+worked out, we simply need to output our woven file.  This is pretty easy to
+do... we just need to select the right formatter and push all the data through it.
+<p><strong><a name="sect21">21</a>. </strong> Yeah, I know I should make a fancy factory or something, but there's only
+three choices at the moment... deal with it!
+<p> &lang;Select the correct output style &rang;&equiv;
+<pre class=listing><code>formatter = None
+if outExtension == "txt":
+  formatter = TextWeaver(outfile)
+elif outExtension == "html":
+  formatter = HTMLWeaver(outfile)
+</code></pre>
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect22">22</a>. </strong> &lang;Write the output file &rang;&equiv;
+<pre class=listing><code>for entry in input_db:
+   </code>&lt; Output a text+code pair <a href="#sect23">23</a> &gt;<code>
+</code></pre>
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect23">23</a>. </strong> Though the code here is long, it is also pretty straightforward. 
+We print out the section, including its name if it has one, in bold.  Then
+we print any text it has.  Then, we output the code associated with this
+section. 
+<p> &lang;Output a text+code pair &rang;&equiv;
+<pre class=listing><code>if (entry.number != None):
+  formatter.entryNumber(entry.number,entry.text_name)
+for l in entry.text:
+   process_code_escapes(formatter,l)
+if entry.code_name:
+   </code>&lt; Output a code header <a href="#sect25">25</a> &gt;<code>
+   formatter.startCodeBlock()
+   for l in entry.code:
+      if is_code_pointer(l):
+         </code>&lt; Output a code pointer <a href="#sect26">26</a> &gt;<code>
+      else:
+         formatter.code(l)
+   formatter.endCodeBlock()
+   </code>&lt; Output a code footer <a href="#sect27">27</a> &gt;<code>
+</code></pre>
+<br>This code used in: <a href="#sect22">22</a>.
+<p><strong><a name="sect24">24</a>. </strong> The textual portion can escape to <code>code</code> mode by enclosing some
+text in vertical bars like this: &#124;<code>code</code>&#124;.  If you want to
+use a single vertical bar (<em>as a vertical bar</em>) in a line of 
+text, that's fine... and you can even put two next to each other without
+worrying.  If you want two on a line with any text in between, though, 
+you'll need to escape them in some way (i.e. in HTML text you can 
+use the HTML entity &amp;124;).
+<p> &lang;Functions &rang;+&equiv;
+<pre class=listing><code>def process_code_escapes(formatter,s):
+  ind1 = s.find('|')
+  if(ind1 &gt;= 0):
+     ind2 = s.find('|', ind1+1)
+     if(ind2 &gt; 0):
+        if (ind2-ind1) &gt; 1:
+          formatter.text(s[:ind1])
+          formatter.inlineCode(s[ind1+1:ind2])
+        else:
+          formatter.text(s[:ind2+1])
+        process_code_escapes(formatter,s[ind2+1:])
+     else:
+        formatter.text(s)
+  else:
+    formatter.text(s)
+</code></pre>
+<br>See also: <a href="#sect6">6</a>, <a href="#sect8">8</a>, <a href="#sect11">11</a>, <a href="#sect12">12</a>, <a href="#sect13">13</a>, <a href="#sect14">14</a>, <a href="#sect19">19</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect25">25</a>. </strong> To output a proper-looking code heading, we need to look it up
+in the name registry, and find out if this is the first definition
+of it, or not.  Most everything else is handled in the formatter.
+<p> &lang;Output a code header &rang;&equiv;
+<pre class=listing><code>reg_ent = name_registry[entry.code_name]
+formatter.codeHeader(entry.code_name,
+                     reg_ent.defined[0] != entry.number,
+                     len(entry.text) &gt; 0)
+</code></pre>
+<br>This code used in: <a href="#sect23">23</a>.
+<p><strong><a name="sect26">26</a>. </strong> Outputting a code pointer involves looking up its number,
+escaping out of <code>code</code>-mode for this line. 
+<p> &lang;Output a code pointer &rang;&equiv;
+<pre class=listing><code>pname = extract_code_pointer(l)
+formatter.codePointer(pname,name_registry[pname].defined[0],len(l)-len(l.lstrip()))
+</code></pre>
+<br>This code used in: <a href="#sect23">23</a>.
+<p><strong><a name="sect27">27</a>. </strong> The code footer consists of a "see also" section (which tells us 
+which other paragraphs include further definition of this code fragment),
+and a "used in" section (which tells us where this code was used).
+<p> &lang;Output a code footer &rang;&equiv;
+<pre class=listing><code>seealso = [e for e in reg_ent.defined if e != entry.number]
+if len(seealso)&gt;0:
+  formatter.seeAlso(seealso)
+
+if len(reg_ent.used_in)&gt;0:
+  formatter.usedIn(reg_ent.used_in)
+</code></pre>
+<br>This code used in: <a href="#sect23">23</a>.
+<p><strong><a name="sect28">28</a>. </strong> &lang;Weave Formatters &rang;&equiv;
+<pre class=listing><code>class HTMLWeaver:
+  def __init__(self,of):
+     self.__outfile = of
+
+  def __make_section_anchor(self,sec):
+    return '&lt;a name="sect{0}"&gt;{0}&lt;/a&gt;'.format(sec)
+  def __make_section_link(self,sec):
+    return '&lt;a href="#sect{0}"&gt;{0}&lt;/a&gt;'.format(sec)
+  def __sanitize_for_HTML(self,s):
+    return s.replace('&amp;','&amp;amp;').replace('&lt;','&amp;lt;').replace('&gt;','&amp;gt;')
+
+  def entryNumber(self,num,name):
+    print('&lt;p&gt;&lt;strong&gt;{0}. {1}&lt;/strong&gt;'.format(
+                                          self.__make_section_anchor(num),
+                                          name or ''),
+          sep = '',end = '',file = self.__outfile)
+
+  def text(self,l):
+    self.__outfile.write(l)
+
+  def inlineCode(self,l):
+    print('&lt;code&gt;',l,'&lt;/code&gt;',sep='',end='',file=self.__outfile)
+
+  def codeHeader(self,name,continued,afterText):
+    suffix = ' &amp;rang;&amp;equiv;'
+    if continued:
+         suffix = ' &amp;rang;+&amp;equiv;'
+    prefix='';
+    if afterText:
+       prefix = '&lt;p&gt;'
+    print(prefix,'&amp;lang;',end='',file=self.__outfile)
+    process_code_escapes(self,name)
+    print(suffix,file = self.__outfile)
+
+  def startCodeBlock(self):
+    print('&lt;pre class=listing&gt;&lt;code&gt;',end='',file = self.__outfile)
+
+  def endCodeBlock(self):
+    print('&lt;/code&gt;&lt;/pre&gt;',file = self.__outfile)
+
+  def codePointer(self,name,number,wspace):
+    self.__outfile.write(' '*wspace)
+    print('&lt;/code&gt;&amp;lt; ',end='',file=self.__outfile)
+    process_code_escapes(self,name)
+    print(' ',self.__make_section_link(number),' &amp;gt;&lt;code&gt;',sep='',file = self.__outfile)
+
+  def code(self, l):
+    self.__outfile.write(self.__sanitize_for_HTML(l))
+
+  def seeAlso(self, sa):
+     seealso = map(self.__make_section_link,sa)
+     print('&lt;br&gt;See also: ',end = '',file = outfile)
+     print(*seealso,sep = ', ',end = '',file = outfile)
+     print('.',file=outfile)
+
+  def usedIn(self, ui):
+     usedin = map(self.__make_section_link,ui)
+     print('&lt;br&gt;This code used in: ',end = '',file = outfile)
+     print(*usedin,sep = ', ',end = '',file = outfile)
+     print('.',file=outfile)
+</code></pre>
+<br>See also: <a href="#sect29">29</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+<p><strong><a name="sect29">29</a>. </strong> &lang;Weave Formatters &rang;+&equiv;
+<pre class=listing><code>class TextWeaver:
+  def __init__(self,of):
+     self.__outfile = of
+
+  def entryNumber(self,num,name):
+    print('\n\n{0}. {1}'.format(num,name or ''),
+          sep = '',end = '',file = self.__outfile)
+
+  def text(self,l):
+    self.__outfile.write(l)
+
+  def inlineCode(self,l):
+    print('|',l,'|',sep='',end='',file=self.__outfile)
+
+  def codeHeader(self,name,continued,afterText):
+    if afterText:
+      print('',file=self.__outfile)
+      print('   &lt; ',end='',file=self.__outfile)
+    else:
+      print('&lt; ',end='',file=self.__outfile)
+    process_code_escapes(self,name)
+    if continued:
+      print(' &gt;+=',file=self.__outfile)
+    else:
+      print(' &gt;=',file=self.__outfile)
+
+  def startCodeBlock(self):
+    pass
+
+  def endCodeBlock(self):
+    print('',file=self.__outfile)
+
+  def codePointer(self,name,number,wspace):
+    self.__outfile.write(' '*(wspace+4))
+    self.__outfile.write('&lt;')
+    process_code_escapes(self,name)
+    print(' ',number,'&gt;',sep='',file = self.__outfile)
+
+  def code(self, l):
+    self.__outfile.write('    ')
+    self.__outfile.write(l)
+
+  def seeAlso(self, sa):
+     print('See also: ',end = '',file = outfile)
+     print(*sa,sep = ', ',end = '',file = outfile)
+     print('.',file=outfile)
+
+  def usedIn(self, ui):
+     print('This code used in: ',end = '',file = outfile)
+     print(*ui,sep = ', ',end = '',file = outfile)
+     print('.',file=outfile)
+</code></pre>
+<br>See also: <a href="#sect28">28</a>.
+<br>This code used in: <a href="#sect2">2</a>.
+</div>
+<div id=footer> 
+<p>&copy; Richard Todd.  All rights reserved. 
+</div>
+</body> 
+</html>

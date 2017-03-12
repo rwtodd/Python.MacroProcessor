@@ -1,0 +1,13 @@
+Minimal LaTeX header: >>>>>>>>>>
+
+@[out-extension: tex@]@rem
+\documentclass{article}
+
+\usepackage[left=1.4in,right=1.4in]{geometry}
+\usepackage{color}
+\usepackage{listings}
+
+\begin{document}
+\lstset{language={},backgroundcolor=\color[rgb]{0.98,0.98,0.98},basicstyle=\small\ttfamily,escapechar=\%}
+
+>>>>> end minimal LaTeX header

@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html> 
+<head> 
+<meta charset="UTF-8" />
+<style type="text/css">
+div#content > pre.listing {
+  background-color: #eee;
+  color: #000;
+  font-size: 1em;
+  border-right: 2px solid #aaa;
+  border-bottom: 2px solid #aaa;
+  margin: 1.12em 4em;
+  padding-left: 1em;
+  padding-top: 1em;
+  padding-bottom: 1em;
+}
+
+code {
+  font-family: "Courier New", Courier, monospace;
+}
+
+div.titleinfo {
+  color: #000;
+  font-size: 1.25em;
+  font-weight: normal;
+  margin-top: 0em;
+}
+
+div#footer {
+  font-style: italic;
+  color: #333;
+  font-size: 0.8em;
+}
+</style>
+<title>A Useful File Pre-Processor</title> 
+</head> 
+<body> 
+<div id=header> 
+<h1>A Useful File Pre-Processor</h1>
+</div> 
+
+<div id=content>
+<div class=titleinfo>Richard Todd<br>2010-10-21</div>
+<p><strong><a name="sect1">1</a>. Introduction.</strong> Writing HTML with numbered end-notes can be frustrating; if I add an
+end-note in the middle of the document, they may need to be renumbered.  Writing a 
+series of articles with similar formatting can be tedious and error-prone.  Manually
+crafting tables to represent game-theory payoffs, for example, is a pain.  I can
+write simple software filters to help with these and other tasks, but before long it
+makes sense to create a generally useful and extensible text filter.
+<p><strong><a name="sect2">2</a>. </strong> This short article describes a python utility module 
+that pre-processes a text file to prepare it for other uses. The public interface is
+in a single class, <code>FileProcessor</code>. To a user, a <code>FileProcessor</code> object
+looks and acts just like a standard python file object.  So, the user just
+calls <code>read()</code> and <code>readline()</code> like normal, and gets processed text rather 
+than the raw text of the input file.
+
+<p>The capabilities of the processor are practically endless, as all of the
+work is delegated to modules that define the commands.  New commands can even
+be created <em>during the processing</em>.  So, <code>FileProcessor</code> itself is 
+mainly a parser for recognizing commands and delegating them out:
+
+<ul>
+  <li>It can recognize a command preceeded by an '<code>@</code>'-symbol.  As in, "<code>@break</code>", which
+  might be a command that produces a large line break in the text, for example.  Commands
+  executed in this form have no arguments.
+  <li>It can recognize a command in the form "<code>@{break: 5@}</code>", and in this form the text
+  after the '<code>:</code>' is sent as arguments to the command.  The example given might insert 
+  5 newlines, perhaps.  The user can use <code>@{ @}</code>, <code>@( @)</code>, or <code>@[ @]</code> as delimiters.
+  <li>It allows for the execution of arbitrary python code, with the result
+      of the calculation textually inserted into the text stream.  This command takes the
+      second form above, only with no name, as in: "<code>@{ 1 + math.sin(0.2) @}</code>" or 
+      "<code>@{ import rwt_article as rwt @}</code>"  
+  <li>It allows users to escape the '@'-symbol with another '@'-symbol.  This is because
+  the text "<code>richard@movethemarkets.com</code>"  would assume that <code>movethemarkets.com</code> is a 
+  command that needs to be executed.  So, I can type "<code>richard@@movethemarkets.com</code>" to
+  get the <code>@</code> symbol through unprocessed.
+</ul>
+
+<p>The only built-in commands will be the nameless "execute python code" command,
+and the <code>rem</code> command.  The <code>rem</code> command acts as a comment, stripping text out of the input 
+stream and not passing it through.  All other commands will be built modularly and 
+installed in the processor when they are imported.  We'll create a few generally-useful
+commands in this very report, so you can see how it's done!
+
+<p>Case is not sensitive on the command names (so <code>@rem</code> or <code>@REM</code> or even <code>@rEm</code> are all ok).
+<p><strong><a name="sect3">3</a>. </strong> This module is used to build all of my articles.  It allows me to 
+write in this fashion:
+<pre class=listing><code>@{import math@}@rem
+@{import rwt_processor.command.inc @}@rem
+@{import rwt_processor.article @}@rem
+
+@{article-start: "Rapid Eye Movement"
+                  "Richard Todd" 
+                  2010-11-04 @}
+
+&lt;h2&gt;Intro&lt;/h2&gt;
+You know, the sine of @{ math.pi @} is @{ math.sin(math.pi) @}.
+
+@{inc: sect1.html @} @{rem: don't forget to copy this... @}
+@{inc: sect2.html @}
+@{inc: sect3.html @}
+
+&lt;h2&gt;Outro&lt;/h2&gt;
+That's it!
+
+@signature
+
+@article-end
+
+</code></pre>
+<p><strong><a name="sect4">4</a>. Implementation.</strong>  The module is called <code>processor</code>, which is installed as <code>rwt_processor.processor</code>.  
+<p> &lang;file:processor.py &rang;&equiv;
+<pre class=listing><code>import sys
+import io
+
+</code>&lt; Helper classes <a href="#sect6">6</a> &gt;<code>
+
+class FileProcessor:
+  </code>&lt; FileProcessor methods <a href="#sect5">5</a> &gt;<code>
+</code></pre>
+<p><strong><a name="sect5">5</a>. </strong> So, you'd instantiate the <code>FileProcessor</code> with a file, typically.  In general, the processor
+will need to maintain a stack of files.  This is to support concepts like processing the output
+of commands, such that commands can produce commands and cause recursion.  As we'll see, it will
+also help us backtrack in the parser, and process inclusion of files from within the first file, etc. 
+So, we'll create a helper class <code>FileStack</code> to handle the complication of reading from the next available
+input stream.
+<p> &lang;FileProcessor methods &rang;&equiv;
+<pre class=listing><code>def __init__(self,file=None):
+  self.__files = FileStack()
+  if(file):
+    self.__files.push(file)
+  </code>&lt; FileProcessor initialization <a href="#sect12">12</a> &gt;<code>
+</code></pre>
+<br>See also: <a href="#sect8">8</a>, <a href="#sect9">9</a>, <a href="#sect10">10</a>, <a href="#sect11">11</a>, <a href="#sect20">20</a>, <a href="#sect25">25</a>, <a href="#sect28">28</a>, <a href="#sect39">39</a>, <a href="#sect40">40</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect6">6</a>. </strong> The <code>FileStack</code> is pretty straightforward:
+<p> &lang;Helper classes &rang;&equiv;
+<pre class=listing><code>class FileStack:
+  def __init__(self):
+    self.__stack = []
+
+  def push(self,fl):
+    self.__stack.append(fl)
+
+  </code>&lt; FileStack methods <a href="#sect7">7</a> &gt;<code>
+</code></pre>
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect7">7</a>. </strong> We know we'll need a way to grab the next raw character from the input stack, so let's
+go ahead and define it.
+<p> &lang;FileStack methods &rang;&equiv;
+<pre class=listing><code>def rawchar(self):
+  if len(self.__stack)==0:
+    return ''
+  c = self.__stack[-1].read(1)
+  while len(c) == 0:
+    old = self.__stack.pop()
+    old.close()
+    if len(self.__stack)==0:
+      return ''
+    c = self.__stack[-1].read(1)
+  return c
+</code></pre>
+<br>See also: <a href="#sect26">26</a>, <a href="#sect42">42</a>.
+<br>This code used in: <a href="#sect6">6</a>.
+<p><strong><a name="sect8">8</a>. </strong> Ok, back to <code>FileProcessor</code>.  We'll provide the typical <code>read()</code> and <code>readline()</code> interfaces, 
+with the exception that the unbounded version of <code>read()</code> is not supported.  The real work of tokenizing
+the input and processing commands is delegated to <code>nextchar()</code>, which we'll get to later.
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def read(self,n):
+  assert(n&gt;0)
+  if n == 1:
+     return self.__nextchar()
+  else:
+     return ''.join([self.__nextchar() for i in range(n)])
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect9">9</a>, <a href="#sect10">10</a>, <a href="#sect11">11</a>, <a href="#sect20">20</a>, <a href="#sect25">25</a>, <a href="#sect28">28</a>, <a href="#sect39">39</a>, <a href="#sect40">40</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect9">9</a>. </strong> Reading a line is as easy as calling <code>nextchar()</code> until we get
+either a newline or the EOF.
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def readline(self):
+  c = self.__nextchar()
+  ans = [c]
+  while (c != '\n') and (c != ''):
+    c = self.__nextchar()
+    ans.append(c)
+  return ''.join(ans)
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect8">8</a>, <a href="#sect10">10</a>, <a href="#sect11">11</a>, <a href="#sect20">20</a>, <a href="#sect25">25</a>, <a href="#sect28">28</a>, <a href="#sect39">39</a>, <a href="#sect40">40</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect10">10</a>. </strong> If a user wants to push an input file into the front of the processor's stack, they can do that.  This way,
+you can set it up to process a series of files in a sort-of batch mode if you want.
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def pushfile(self,fl):
+  self.__files.push(fl)
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect8">8</a>, <a href="#sect9">9</a>, <a href="#sect11">11</a>, <a href="#sect20">20</a>, <a href="#sect25">25</a>, <a href="#sect28">28</a>, <a href="#sect39">39</a>, <a href="#sect40">40</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect11">11</a>. Commands Interface.</strong>  As I mentioned in the introduction, the set of commands that the processor can handle
+is not only extensible, but dynamic at runtime.  So, part of our public interface will be devoted to registering
+new commands.  When you register a command, you give it a name, a function to call to handle the command, and
+tell whether you want the arguments parsed out for you or not.  More on that later.
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def register(self,name,cmd,parsed):
+  n = name.upper()
+  if (n in self.__commandList):
+    print('Warning: duplicate command "{0}" installed!'.format(n),
+          file=sys.stderr)
+  self.__commandList[n]=(cmd,parsed)
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect8">8</a>, <a href="#sect9">9</a>, <a href="#sect10">10</a>, <a href="#sect20">20</a>, <a href="#sect25">25</a>, <a href="#sect28">28</a>, <a href="#sect39">39</a>, <a href="#sect40">40</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect12">12</a>. </strong> We'll initialize our command list during <code>__init__</code>:
+<p> &lang;FileProcessor initialization &rang;&equiv;
+<pre class=listing><code>self.__commandList = {}
+</code></pre>
+<br>See also: <a href="#sect19">19</a>, <a href="#sect33">33</a>, <a href="#sect34">34</a>.
+<br>This code used in: <a href="#sect5">5</a>.
+<p><strong><a name="sect13">13</a>. </strong> As an example of how commands work, let's define an "<code>inc</code>" command, to pull in the text of a named file.
+Since there's no state to store, we can define our command as a simple function, <code>run()</code>.   The function 
+returns an opened file, which the <code>FileProcessor</code> will duly push onto the stack for us.  If we had returned
+a string or a number or a list, that would have been turned into a string and pushed onto the input stack
+for processing as well, in the form of an <code>io.StringIO</code> memory stream.  So, the processor tries to be
+reasonably intelligent about what to do with our return values.
+
+<P>The <code>init_processor_module()</code> function will be called by the <code>FileProcessor</code> when this module is loaded, to 
+give it a chance to register any commands it may have.  A single module can register any number of
+commands.
+<p> &lang;file:inc.py &rang;&equiv;
+<pre class=listing><code>def run(processor,args):
+   if len(args)&gt;1:
+      raise Exception("Too many arguments to INC: "+str(args))
+   return open(args[0],'r')
+
+def init_processor_module(processor):
+  processor.register("inc",run,True)
+</code></pre>
+<p><strong><a name="sect14">14</a>. </strong> Note that, in many cases, you won't want to define new parser commands, but merely import a module that
+makes functions and classes available to you.  This is also possible. For instance, we could have also
+defined the "<code>inc</code>" functionality like this:
+
+<pre class=listing><code>def include(fname):
+  return(open(fname,'r'))
+</code></pre>
+
+<p>...and called it like this from our document:
+
+<pre class=listing><code>
+@{ import rwt_processor.commands.inc as inc @}
+
+@{ inc.include("test1.html") @} @rem works just as well...
+
+@{ open("test1.html",'r') @} @rem of course, so does this!
+</code></pre>
+
+<p>So the point is, you have options.  
+<p><strong><a name="sect15">15</a>. </strong> Let's define a more complex command module, this time for tracking and referencing end-notes for
+an HTML document.  Note that, this time, we have to maintain state across two commands, so we put them in the same object.  We register bound methods with the processor in <code>init_processor_module()</code>, which works great for our purposes.
+<p> &lang;file:endnotes.py &rang;&equiv;
+<pre class=listing><code>import io
+
+class EndNotes:
+  def __init__(self):
+    self.__notes = []
+
+  def add(self,processor,text):
+    self.__notes.append(text)
+    return ( '&lt;sup&gt;&lt;a href="#ENDNOTE-{0}"&gt;{0}&lt;/a&gt;&lt;/sup&gt;'.
+                format(len(self.__notes)) )
+
+  def output(self,processor,text):
+    if len(text)&gt;0:
+      raise Exception('Not expecting arguments when outputting endnotes!')
+    fl = io.StringIO()
+    print('&lt;ol&gt;',file=fl)
+    for i,n in enumerate(self.__notes):
+      print('&lt;li id="ENDNOTE-{0}"&gt;{1}&lt;/li&gt;'.format(i,n),
+            file=fl)
+    print('&lt;/ol&gt;',file=fl)
+    return fl
+
+def init_processor_module(processor):
+  notes = EndNotes()
+  processor.register("endnote",notes.add,False)
+  processor.register("output-notes",notes.output,False)
+</code></pre>
+<p><strong><a name="sect16">16</a>. </strong> An example of using this module might look like:
+<pre class=listing><code>@[ import rwt_processor.command.endnotes @]
+
+...
+And here's a thing@[ENDNOTE: Things are pretty cool. @] you 
+should know.
+
+...
+
+&lt;h2&gt;End Notes&lt;/h2&gt;
+@OUTPUT-NOTES</code></pre>
+<p><strong><a name="sect17">17</a>. </strong> So that's the public interface of the <code>FileProcessor</code>.  You can see all the real command-parsing and dispatch
+happens in the <code>nextchar()</code> method.  We'll spend most of the rest of this article building that up.
+<p><strong><a name="sect18">18</a>. A Tokenizer.</strong> We're about to get to <code>nextchar()</code>, but first we'll need a tokenizer
+to break the input stream into:
+<ul>
+  <li>Normal characters.
+  <li>Command initiators (<code>@{name: </code>):
+   <li>Command terminators (<code>@}</code>)
+   <li>Commands without arguments (<code>@name</code> or <code>@name:</code>)
+   <li>The special case: end-of-line <code>@rem</code>
+   <li>The special case: arbitrary python code (<code>@{ code @}</code>)
+</ul>
+<p>The tokenizer won't know or care how to process the commands... it just splits
+up the text into useful guideposts for <code>nextchar()</code> to use.
+<p><strong><a name="sect19">19</a>. </strong> Those guideposts will need easy-to-check tags.  We'll store them at the object level.
+<p> &lang;FileProcessor initialization &rang;+&equiv;
+<pre class=listing><code>self.__CHAR = 1
+self.__CMDINIT = 2
+self.__CMDTERM = 3
+self.__CMDNOARG = 4
+self.__REMEOL = 5
+self.__PYTHON = 6
+self.__EOF = 7
+</code></pre>
+<br>See also: <a href="#sect12">12</a>, <a href="#sect33">33</a>, <a href="#sect34">34</a>.
+<br>This code used in: <a href="#sect5">5</a>.
+<p><strong><a name="sect20">20</a>. </strong> The basic plan for the tokenizer is simple... assume you are going to get 
+a character, unless you spot a '<code>@</code>.'  If you spot a '<code>@</code>,' check to see
+if you have one of the other tokens.
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def __token(self):
+  c = self.__files.rawchar()
+  if len(c)==0:
+    return (self.__EOF,None)
+  elif c == '@':
+    </code>&lt; Check for a command <a href="#sect21">21</a> &gt;<code>
+  return (self.__CHAR,c)
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect8">8</a>, <a href="#sect9">9</a>, <a href="#sect10">10</a>, <a href="#sect11">11</a>, <a href="#sect25">25</a>, <a href="#sect28">28</a>, <a href="#sect39">39</a>, <a href="#sect40">40</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect21">21</a>. </strong> Here, we're reading ahead to see if we have a command
+token.  In the case where we have to back up again, we just
+push the string onto our input stack, rather than using costly
+<code>seek()</code> and <code>tell()</code> calls.  In the first version of this code,
+I did <code>seek()</code> and <code>tell()</code>, but it turned out to be a costly
+bottleneck.
+<p> &lang;Check for a command &rang;&equiv;
+<pre class=listing><code>c2 = self.__files.rawchar()
+if c2 == '@':  # the @@ case...
+  return (self.__CHAR,c2)
+elif c2 == '{' or c2 == '(' or c2 == '[':
+  </code>&lt; Tokenize a command in braces <a href="#sect22">22</a> &gt;<code>
+elif c2 == '}' or c2 == ')' or c2 == ']':
+   return (self.__CMDTERM,c2)
+elif (c2.isalnum() or c2=='-' or c2=='_'):
+  </code>&lt; Tokenize a command with no args <a href="#sect24">24</a> &gt;<code>
+else:
+  self.__files.push(io.StringIO(c2))
+</code></pre>
+<br>This code used in: <a href="#sect20">20</a>.
+<p><strong><a name="sect22">22</a>. </strong> When we get inside braces, we start looking for a command name.  These
+can any amount of alphanumerics, plus dashes and underscores. 
+ If we find a colon-delimited word, we assume it is a command name.
+If we don't find a command name, we assume we are looking at
+arbitrary python code.
+<p> &lang;Tokenize a command in braces &rang;&equiv;
+<pre class=listing><code>chars = []
+c = self.__files.rawchar()
+while(c.isalnum() or c=='_' or c=='-'):
+  chars.append(c)
+  c = self.__files.rawchar()
+if c != ':':
+  </code>&lt; Tokenize python code <a href="#sect23">23</a> &gt;<code>
+else:
+  cname = ''.join(chars).upper()
+  return (self.__CMDINIT,(c2,cname))
+</code></pre>
+<br>This code used in: <a href="#sect21">21</a>.
+<p><strong><a name="sect23">23</a>. </strong> By the time we realize it's not a command, we have already read some of our
+python code, so we need to push it back onto our input stack in an <code>io.StringIO</code>
+object:
+<p> &lang;Tokenize python code &rang;&equiv;
+<pre class=listing><code>chars.append(c)
+self.__files.push(io.StringIO(''.join(chars)))
+return (self.__PYTHON,c2)
+</code></pre>
+<br>This code used in: <a href="#sect22">22</a>.
+<p><strong><a name="sect24">24</a>. </strong> Now, in the no-args case, we just read in an identifier like we did in the braces case.  
+No-arg commands end with the first space, colon, or paren.  If the delimiter is a colon, 
+we'll eat it.  This way, a command can be wedged into some text, as in: "<code>Mr.@nbsp:Todd.</code>" 
+<p> &lang;Tokenize a command with no args &rang;&equiv;
+<pre class=listing><code>chars = [c2]
+c = self.__files.rawchar()
+while(c.isalnum() or c=='_' or c=='-'):
+  chars.append(c)
+  c = self.__files.rawchar()
+if c != ':':
+  self.__files.push(io.StringIO(c))
+cname = ''.join(chars).upper()
+if cname == 'REM':
+  return (self.__REMEOL,None)
+return (self.__CMDNOARG,cname)
+</code></pre>
+<br>This code used in: <a href="#sect21">21</a>.
+<p><strong><a name="sect25">25</a>. nextchar().</strong>  Now we get to the most important part of the class, which is <code>nextchar()</code>.
+It basically returns one character, but processes all of the commands it finds
+along the way.  So, this is the code that knows how to process an inclusion, execute
+arbitrary python code, etc.
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def __nextchar(self,inComment=False,inBraces=False):
+  typ, c = self.__token()
+  if typ==self.__CHAR:
+    return c
+  elif typ==self.__PYTHON:
+    </code>&lt; Process python code <a href="#sect32">32</a> &gt;<code>
+  elif typ==self.__CMDINIT:
+    </code>&lt; Process a command <a href="#sect27">27</a> &gt;<code>
+  elif typ==self.__CMDNOARG:
+    </code>&lt; Process a no-arg command <a href="#sect30">30</a> &gt;<code>
+  elif typ==self.__REMEOL:
+    </code>&lt; Process an eol comment <a href="#sect31">31</a> &gt;<code>
+  elif typ==self.__CMDTERM:
+    </code>&lt; Process a closing brace <a href="#sect36">36</a> &gt;<code>
+  elif typ==self.__EOF:
+    </code>&lt; Process the end-of-file <a href="#sect37">37</a> &gt;<code>
+  else:
+    raise Exception('Bad Token! '+str(typ)+str(c)+' while processing '+
+                    self.__files.curloc())
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect8">8</a>, <a href="#sect9">9</a>, <a href="#sect10">10</a>, <a href="#sect11">11</a>, <a href="#sect20">20</a>, <a href="#sect28">28</a>, <a href="#sect39">39</a>, <a href="#sect40">40</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect26">26</a>. </strong> During our exception handling, we used a method called <code>curloc()</code> on our
+<code>FileStack</code>, so let's define it before moving on:
+<p> &lang;FileStack methods &rang;+&equiv;
+<pre class=listing><code>def curloc(self):
+  ## FIXME print what the next line would have been...
+  while len(self.__stack)&gt;0 and (not hasattr(self.__stack[-1],'name')):
+    self.__stack.pop()
+  if len(self.__stack)==0:
+    return 'Nowhere'
+  return (self.__stack[-1].name + ' at position  ' +
+          str(self.__stack[-1].tell()))
+</code></pre>
+<br>See also: <a href="#sect7">7</a>, <a href="#sect42">42</a>.
+<br>This code used in: <a href="#sect6">6</a>.
+<p><strong><a name="sect27">27</a>. </strong> Processing a command is easy... just look it up and run it. 
+
+To get the arguments, we use a helper method <code>readUntilClosingBraces()</code>, which
+we'll define in a bit, but whose purpose should be obvious.   We again have to
+special-case the <code>@REM</code> command, to properly set <code>inComment</code> and avoid processing
+code while reading text meant to be elided.
+<p> &lang;Process a command &rang;&equiv;
+<pre class=listing><code>if c[1] == 'REM':
+  self.__readUntilClosingBraces(True,c[0])
+else:
+  args = self.__readUntilClosingBraces(inComment,c[0]).strip()
+  self.__executeCommand(c[1],args,inComment)
+return self.__nextchar(inComment,inBraces)
+</code></pre>
+<br>This code used in: <a href="#sect25">25</a>.
+<p><strong><a name="sect28">28</a>. </strong> Here's the code that executes the command we found, which looks more
+complicated than it is.  More of this code is for error-catching than 
+anything else.  We don't perform the command if we are inside a comment.
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def __executeCommand(self,c,args,inComment):
+  if not inComment:
+    try:
+      func,parsed = self.__commandList[c]
+    except KeyError:
+      raise SyntaxError('Never heard of a command named '+c+' near ' +
+                        self.__files.curloc())
+    else:
+      if parsed:
+         </code>&lt; Split args up <a href="#sect29">29</a> &gt;<code>
+      try:
+         self.__interpretResults( func(self,args) )
+      except Exception as e:
+         raise Exception("Error: "+str(e)+" near " +
+                         self.__files.curloc())
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect8">8</a>, <a href="#sect9">9</a>, <a href="#sect10">10</a>, <a href="#sect11">11</a>, <a href="#sect20">20</a>, <a href="#sect25">25</a>, <a href="#sect39">39</a>, <a href="#sect40">40</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect29">29</a>. </strong> A user can call a parsed command with quotes around some words,
+which causes those words to count as a single argument.  For instance,
+<code>@{inc: "my favorite text file.txt" @}</code> should receive one argument, and
+not four.
+<p> &lang;Split args up &rang;&equiv;
+<pre class=listing><code>parsed = []
+sloc = 0
+eloc = 0
+while( eloc &lt; len(args) ):
+  # find the first letter...
+  while args[eloc].isspace():
+     eloc = eloc + 1
+  sloc = eloc
+  if(args[sloc] == '"'):
+     eloc = args.find('"',sloc+1)
+     if(eloc &gt; 0):
+        parsed.append(args[sloc+1:eloc])
+        eloc = eloc + 1
+     else:
+        raise SyntaxError('Mismatched quotes in &lt;' +
+                           args + '&gt; near ' +
+                           self.__files.curloc())
+  else:
+      eloc = eloc + 1
+      while( eloc &lt; len(args) and
+             not args[eloc].isspace() ):
+          eloc = eloc + 1
+      parsed.append(args[sloc:eloc])
+args = parsed
+</code></pre>
+<br>This code used in: <a href="#sect28">28</a>.
+<p><strong><a name="sect30">30</a>. </strong> A no-arg command is virtually identical to the braces case:
+<p> &lang;Process a no-arg command &rang;&equiv;
+<pre class=listing><code>self.__executeCommand(c,'',inComment)
+return self.__nextchar(inComment,inBraces)
+</code></pre>
+<br>This code used in: <a href="#sect25">25</a>.
+<p><strong><a name="sect31">31</a>. </strong> The one special case of a no-arg command was the <code>@rem</code>, which will throw away raw characters
+until a newline is hit.  It's the fact that it works on raw characters and not processed ones
+that forces us to make it a special case.
+<p> &lang;Process an eol comment &rang;&equiv;
+<pre class=listing><code>c = self.__files.rawchar()
+while c != '' and c != '\n':
+  c = self.__files.rawchar()
+return self.__nextchar(inComment,inBraces)
+</code></pre>
+<br>This code used in: <a href="#sect25">25</a>.
+<p><strong><a name="sect32">32</a>. </strong> Processing arbitrary python code is easy... except that the language
+distinguishes between <em>statements</em> and <em>expressions</em>.  So,
+we assume that we are processing an expression, and if python disagrees,
+we try to process the code as statements.  Note also that expressions cause output,
+while statements can only cause processing.  Of course we don't execute 
+anything if we are inside a comment.
+
+<p>Note that we push the output from an expression onto the <code>__files</code> stack, so that
+the result will be processed like all other text.  This makes it possible to run
+metacommands that produce commands!
+<p> &lang;Process python code &rang;&equiv;
+<pre class=listing><code>text = self.__readUntilClosingBraces(inComment,c).lstrip()
+if not inComment:
+  try:
+     ans = eval(text,self.__globals,self.__locals)
+     self.__interpretResults(ans)
+  except SyntaxError:
+     exec(text,self.__globals,self.__locals)
+     </code>&lt; Notice if the <code>text</code> was an <code>import</code>, and register commands <a href="#sect35">35</a> &gt;<code>
+return self.__nextchar(inComment)
+</code></pre>
+<br>This code used in: <a href="#sect25">25</a>.
+<p><strong><a name="sect33">33</a>. </strong> We'll store our working sandbox local and global namespaces at the 
+object level, and initialize them at construction.
+<p> &lang;FileProcessor initialization &rang;+&equiv;
+<pre class=listing><code>self.__locals = {}
+self.__globals = {}
+self.__globals['__builtins__'] = __builtins__
+</code></pre>
+<br>See also: <a href="#sect12">12</a>, <a href="#sect19">19</a>, <a href="#sect34">34</a>.
+<br>This code used in: <a href="#sect5">5</a>.
+<p><strong><a name="sect34">34</a>. </strong> We'll also make the processor itself available to our arbitrary code.  It can
+come in handy for weird cases when your code wants to <code>read()</code> ahead in the stream.  Of 
+course, extreme care should be taken if you ever do this!
+<p> &lang;FileProcessor initialization &rang;+&equiv;
+<pre class=listing><code>self.__globals['processor']=self
+</code></pre>
+<br>See also: <a href="#sect12">12</a>, <a href="#sect19">19</a>, <a href="#sect33">33</a>.
+<br>This code used in: <a href="#sect5">5</a>.
+<p><strong><a name="sect35">35</a>. </strong> There is one unique situation when executing arbitrary python code.  That is, when
+we have an <code>import</code> statement, we may be importing a module which defines some new
+commands for our processor.  We looked at some example modules that did this earlier, and
+they registered their commands in a function called <code>init_processor_module()</code>.  Well, for that to work,
+the processor is going to have to notice the import and then call that function.
+
+<p>Note that we don't go looking through all the code for imports... only the first 
+lines in the bunch is noted.  As soon as a line doesn't start with "<code>import</code>", we stop
+looking. 
+<p> &lang;Notice if the <code>text</code> was an <code>import</code>, and register commands &rang;&equiv;
+<pre class=listing><code>if text.startswith('import '):
+  for ln in text.split('\n'):
+    spl = ln.split()
+    if spl[0]=='import':
+       mod = spl[1]
+       # import x as y
+       if (len(spl) == 4) and (spl[2]=='as'):
+          mod = spl[3]
+       exec('if hasattr({0},"init_processor_module"): '
+            '{0}.init_processor_module(processor)'.format(mod),
+            self.__globals,self.__locals)
+    else:
+      break
+</code></pre>
+<br>This code used in: <a href="#sect32">32</a>.
+<p><strong><a name="sect36">36</a>. </strong> When we get a <code>CMDTERM</code>, it's cool as long as we were looking for it. 
+<p> &lang;Process a closing brace &rang;&equiv;
+<pre class=listing><code>if ( (inBraces=='{' and c=='}') or
+     (inBraces=='[' and c==']') or
+     (inBraces=='(' and c==')') ):
+   return None
+else:
+   raise SyntaxError('Unexpected closing brace while processing '+
+                     self.__files.curloc())
+</code></pre>
+<br>This code used in: <a href="#sect25">25</a>.
+<p><strong><a name="sect37">37</a>. </strong> If we get to the end of the file, it's always ok <em>unless</em> we were
+reading inside of braces:
+<p> &lang;Process the end-of-file &rang;&equiv;
+<pre class=listing><code>    if inBraces==False:
+      return ''
+    else:
+      raise SyntaxError('Unexpected EOF while inside a command!"')
+</code></pre>
+<br>This code used in: <a href="#sect25">25</a>.
+<p><strong><a name="sect38">38</a>. Odds and Ends.</strong><p><strong><a name="sect39">39</a>. </strong> In a couple of these code paths, we've needed 
+to pull text up until a closing bace.  At long last, here is that code:
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def __readUntilClosingBraces(self,inComment,brace):
+  ans = []
+  c = self.__nextchar(inComment,brace)
+  while c != None:
+    ans.append(c)
+    c = self.__nextchar(inComment,brace)
+  return ''.join(ans)
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect8">8</a>, <a href="#sect9">9</a>, <a href="#sect10">10</a>, <a href="#sect11">11</a>, <a href="#sect20">20</a>, <a href="#sect25">25</a>, <a href="#sect28">28</a>, <a href="#sect40">40</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect40">40</a>. </strong> We had a helper method to interpret the results of our commands that 
+still needs to be defined.  Basically, if it's a file or a string of 
+some kind, we push it onto the input stack.  If it's <code>None</code>, we ignore it. 
+If it's anything else, we call <code>str()</code> on it and push it 
+onto the input stack.  The only wrinkle with <code>StringIO</code> results is that,
+when you build one up, you have to <code>seek(0)</code> in order to read it back.
+So here, we assume that's what is needed, which keeps every command
+that builds up a string from having to do it. 
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def __interpretResults(self,r):
+  if isinstance(r,io.StringIO):
+    r.seek(0)
+    self.__files.push(r)
+  elif isinstance(r,io.TextIOBase):
+    self.__files.push(r)
+  elif isinstance(r,str):
+    if len(r)&gt;0:
+      self.__files.push(io.StringIO(r))
+  elif r != None:
+    self.__files.push(io.StringIO( str(r) ))
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect8">8</a>, <a href="#sect9">9</a>, <a href="#sect10">10</a>, <a href="#sect11">11</a>, <a href="#sect20">20</a>, <a href="#sect25">25</a>, <a href="#sect28">28</a>, <a href="#sect39">39</a>, <a href="#sect41">41</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect41">41</a>. </strong> Lastly, we want to be able to use a <code>FileProcessor</code> with the python <code>with</code> statement.
+So, we'll need to handle the <code>__enter__()</code> and <code>__exit__()</code> methods, which is 
+fortunately very easy.
+<p> &lang;FileProcessor methods &rang;+&equiv;
+<pre class=listing><code>def __enter__(self):
+  return self
+def __exit__(self,t,v,tb):
+  self.__files.closeall()
+  return False
+</code></pre>
+<br>See also: <a href="#sect5">5</a>, <a href="#sect8">8</a>, <a href="#sect9">9</a>, <a href="#sect10">10</a>, <a href="#sect11">11</a>, <a href="#sect20">20</a>, <a href="#sect25">25</a>, <a href="#sect28">28</a>, <a href="#sect39">39</a>, <a href="#sect40">40</a>.
+<br>This code used in: <a href="#sect4">4</a>.
+<p><strong><a name="sect42">42</a>. </strong> &lang;FileStack methods &rang;+&equiv;
+<pre class=listing><code>def closeall(self):
+  for f in self.__stack:
+    f.close()
+</code></pre>
+<br>See also: <a href="#sect7">7</a>, <a href="#sect26">26</a>.
+<br>This code used in: <a href="#sect6">6</a>.
+<p><strong><a name="sect43">43</a>. rwtproc.</strong> Finally, a little utility to read a given file, and print out the processed version.
+<p> &lang;file:rwtproc.py &rang;&equiv;
+<pre class=listing><code>#!/usr/bin/env python3
+import rwt_processor.processor as proc
+import sys
+
+outext = "txt"
+def set_ext(processor,txt):
+  global outext
+  outext = txt
+
+def out_filename(fn):
+  loc = fn.rfind('.')
+  if loc &gt; 0:
+    return fn[:loc+1] + outext
+  else:
+    return fn + '.' + outext
+
+infile = proc.FileProcessor( open(sys.argv[1],'r') )
+infile.register("out-extension",set_ext,False)
+
+with infile:
+  l = infile.readline()
+  with open(out_filename(sys.argv[1]),'w') as outfile:
+    while l != '':
+      outfile.write(l)
+      l = infile.readline()
+</code></pre>
+<p><strong><a name="sect44">44</a>. </strong> And, with that, we're done! 
+
+</div>
+<div id=footer> 
+<p>&copy; 2010-10-21 by Richard Todd.  All rights reserved. 
+</div>
+</body> 
+</html>

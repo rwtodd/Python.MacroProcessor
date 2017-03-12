@@ -1,0 +1,11 @@
+Make the following directories (make root whatever you want):
+
+$ROOT/
+   put pytangle.py and pyweave.py and rwtproc.py here 
+$ROOT/rwt_processor
+   put processor.py here 
+$ROOT/rwt_processor/command
+   put inc.py here
+$ROOT/rwt_processor.html
+   put article.py and  endnotes.py here
+
