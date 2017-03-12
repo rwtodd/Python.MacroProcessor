@@ -1,0 +1,39 @@
+%%% sequential footnotes
+\newcount\notenum\notenum=0\def\note{\advance\notenum by1\footnote{$^{\the\notenum}$}}
+
+%%% sequential theorems/axioms
+\def\rwtProclaim#1#2\par{\medbreak
+\noindent{\bf #1\enspace}{\sl#2\par}% 
+\ifdim\lastskip<\medskipamount \removelastskip\penalty55\medskip\fi} 
+
+
+\def\Theorem #1.{\rwtProclaim{Theorem \ifnum\chapnum>0 \the\chapnum.\fi#1}}
+\def\Axiom #1.{\rwtProclaim{Axiom \ifnum\chapnum>0 \the\chapnum.\fi#1}}
+
+
+%%%%  Sections...
+\font\titlefont=cmtt10 at 20pt
+\font\sectfont=cmtt8 at 14pt
+
+\newcount\chapnum\chapnum=0
+\def\Chapter #1\par{\advance\chapnum by1\vfill\eject\break\vskip 1.5in
+\noindent{\sectfont Chapter \the\chapnum:}
+\par\centerline{\titlefont #1}\medskip}
+
+\def\Section #1\par{\bigbreak\noindent{\sectfont #1}\medskip}
+
+
+\def\Title #1. #2. #3\par{%
+\line{\hfil\vtop{\hbox{\tt RWT -- #2}\hbox{\tt #3}}}
+\vskip 0.75in\centerline{\titlefont #1}\vskip 0.5in%
+}
+
+% another Title option...
+%\def\Title #1. #2. #3\par{\centerline{\titlefont #1}\medskip%
+%\centerline{\bf #2}\smallskip%
+%\centerline{\bf #3}}
+
+
+% non indenting, please
+\parindent=0pt
+\parskip=2ex plus 3pt minus 2pt
